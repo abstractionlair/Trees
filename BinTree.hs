@@ -45,10 +45,11 @@ count_bin_tree t = foldl_bin_tree_by_row countOne 0 t
                    where countOne v t = v + bin_tree_weight t
 
 
+bin_tree_depth EmptyBinTree = 0
+bin_tree_depth t = bin_tree_depth' t ( value t ) ( left t ) ( right t )
+bin_tree_depth' t vt EmptyBinTree EmptyBinTree = 1
+bin_tree_depth' t vt lt           EmptyBinTree = 1 + bin_tree_depth lt
+bin_tree_depth' t vt EmptyBinTree rt           = 1 + bin_tree_depth rt
+bin_tree_depth' t vt lt           rt           = 1 + max ( bin_tree_depth lt ) ( bin_tree_depth rt )
 
-
-
-
-
-
-
+  
