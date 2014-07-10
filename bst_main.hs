@@ -27,8 +27,6 @@ main = do
   let nums = reverse [ 1 .. 200 ]
       h = make_bst nums
       in print ( bin_tree_depth ( bst_as_bin_tree h ) )
-  
-         
-  
-
-
+  let nums = take 200 ( randomRs (1::Int, 100::Int ) g )
+      h = make_bst nums
+      in print ( bin_tree_show ( bst_as_bin_tree ( search_bst 20 h ) ) )

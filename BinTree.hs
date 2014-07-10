@@ -33,9 +33,10 @@ foldl_bin_tree_by_row'    fn                         init    (t:ts)         = fo
                                                                               where newVal  = foldl fn init (t:ts)
                                                                                     nextRow = next_bin_tree_row (t:ts)
 
-bin_tree_show h = map ( map bin_tree_show0 ) (bin_tree_rows h)
-bin_tree_show0 EmptyBinTree = "E"
-bin_tree_show0 h = show ( value h )
+bin_tree_show h = map ( map bin_tree_show' ) (bin_tree_rows h)
+
+bin_tree_show' EmptyBinTree = "E"
+bin_tree_show' h            = show ( value h )
 
 bin_tree_weight :: BinTree a -> Int
 bin_tree_weight EmptyBinTree = 0
@@ -45,11 +46,12 @@ count_bin_tree t = foldl_bin_tree_by_row countOne 0 t
                    where countOne v t = v + bin_tree_weight t
 
 
-bin_tree_depth EmptyBinTree = 0
-bin_tree_depth t = bin_tree_depth' t ( value t ) ( left t ) ( right t )
-bin_tree_depth' t vt EmptyBinTree EmptyBinTree = 1
-bin_tree_depth' t vt lt           EmptyBinTree = 1 + bin_tree_depth lt
-bin_tree_depth' t vt EmptyBinTree rt           = 1 + bin_tree_depth rt
-bin_tree_depth' t vt lt           rt           = 1 + max ( bin_tree_depth lt ) ( bin_tree_depth rt )
+bin_tree_depth :: (Num a, Ord a) => BinTree a1 -> a
+bin_tree_depth EmptyBinTree                     = 0
+bin_tree_depth t@( BinTree vt EmptyBinTree EmptyBinTree ) = 1
+bin_tree_depth t@( BinTree vt lt           EmptyBinTree ) = 1 + bin_tree_depth lt
+bin_tree_depth t@( BinTree vt EmptyBinTree rt           ) = 1 + bin_tree_depth rt
+bin_tree_depth t@( BinTree vt lt           rt           ) = 1 + max ( bin_tree_depth lt ) ( bin_tree_depth rt )
+
 
   
