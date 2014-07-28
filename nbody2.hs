@@ -2,8 +2,8 @@ module Main where
 
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as U
-
-data Planets = Planets { positions :: !(V.Vector (U.Vector Double)), velocities :: !(V.Vector (U.Vector Double)), masses :: !(V.Vector Double)} deriving Show
+import System.Environment
+import Text.Printf
 
 --------------------------------------------------------------------------------
 -- Physics style vectors using Data.Vector.Unboxed
@@ -23,6 +23,9 @@ uuDifference u1 u2 = U.zipWith (-) u1 u2
 
 uMagnitude :: U.Vector Double ->  Double
 uMagnitude u = sqrt (U.sum (U.zipWith (*) u u))
+
+uMagnitudeSq :: U.Vector Double ->  Double
+uMagnitudeSq u = U.sum (U.zipWith (*) u u)
 
 uZero3 :: U.Vector Double
 uZero3 = U.replicate 3 (0.0::Double)
@@ -56,6 +59,8 @@ makeURT f n = let g i j = f i (j+i+1)
                   makerow i = V.generate (n-i) (g i)
               in V.generate n makerow 
 
+vvMap f vv = V.map (V.map f) vv
+
 -- [ [ g00 g01 g02],  [m0, m1, m2] -> [ [ f g00 m0, f g01 m1, f g02 m2 ],
 --   [ g10 g11 g12],                    [ f g10 m0, f g11 m1, f g12 m2 ],
 --   [ g20 g21 g22] ],                  [ f g20 m0, f g21 m1, f g22 m2 ] ]
@@ -77,48 +82,176 @@ vvURTDotMapV f vv v = let vsvs = subVecsInOrder v
 
 -- The positional part of the force on i due to j.
 -- \delta\vec{x} / |\delta\vec{x}|^3 
-grav planets i j = let pos  = (positions planets)
-                       dx   = (pos V.! j) `uuDifference` (pos V.! i)
-                       idxc = 1.0 / (uMagnitude dx) ^ 3
-                   in dx `udProduct` idxc
+grav positions i j = let dx   = (positions V.! j) `uuDifference` (positions V.! i)
+                         idxc = 1.0 / (uMagnitude dx) ^ 3
+                     in dx `udProduct` idxc
 
 -- The upper right triangle of the forces between planets.
 -- Matrix of vectors.
-gravURT planets = makeURT (grav planets) ((V.length (masses planets))-1)
+gravURT positions = makeURT (grav positions) ((V.length positions)-1)
 
 -- The lower left triangle
 -- From the upper right using the fact that the matrix is antisymmetric
 gravLLT urt = let f i j = (urt V.! j V.! (i-j)) `udProduct` (-1.0)
               in makeLLTD f (V.length urt)
 
-advance 0 _  planets = planets
-advance n dt planets = let pmasses                      = (masses planets)
-                           massesDt                     = dvProduct dt pmasses
-                           gURT                         = gravURT planets
-                           gLLT                         = gravLLT gURT
-                           gmURT                        = vvURTDotMapV udProduct gURT (V.unsafeTail massesDt)
-                           gmLLT                        = vvDotMapV udProduct gLLT massesDt
-                           nPlanets                     = V.length massesDt
-                           lastPlanet                   = nPlanets - 1
-                           deltaVel i | i == 0          = gmURT V.! 0
-                                      | i == lastPlanet = gmLLT V.! (lastPlanet-1)
-                                      | otherwise       = (gmURT V.! i) `uuSum` (gmLLT V.! (i-1))
-                           deltaVels                    = V.generate nPlanets deltaVel
-                           newVels                      = V.zipWith uuSum (velocities planets) deltaVels
-                           deltaPos                     = V.map (duProduct dt) newVels
-                           newPos                       = V.zipWith uuSum (positions planets) deltaPos
-                       in advance (n-1) dt (Planets newPos newVels pmasses)
+advance :: Int -> Double -> V.Vector Double -> V.Vector (U.Vector Double) -> V.Vector (U.Vector Double) -> (V.Vector (U.Vector Double), V.Vector (U.Vector Double))
+advance n dt masses positions velocities = let rmasses                    = dvProduct (dt * dt) masses
+                                               rvelocities                = V.map (duProduct dt) velocities
+                                               (fpositions, frvelocities) = advance' n rmasses positions rvelocities
+                                               fvelocities                = V.map (duProduct (1.0/dt)) frvelocities
+                                            in (fpositions, fvelocities)
+
+-- advance' works with a rescaled time where dt = 1.0
+advance' :: Int -> V.Vector Double -> V.Vector (U.Vector Double) -> V.Vector (U.Vector Double) -> (V.Vector (U.Vector Double), V.Vector (U.Vector Double))
+advance' 0 rmasses positions rvelocities = (positions, rvelocities)
+advance' n rmasses positions rvelocities = let gURT                         = gravURT positions
+                                               gLLT                         = gravLLT gURT
+                                               gmURT                        = vvURTDotMapV udProduct gURT (V.unsafeTail rmasses)
+                                               gmLLT                        = vvDotMapV udProduct gLLT rmasses
+                                               nPlanets                     = V.length rmasses
+                                               lastPlanet                   = nPlanets - 1
+                                               deltaVel i | i == 0          = gmURT V.! 0
+                                                          | i == lastPlanet = gmLLT V.! (lastPlanet-1)
+                                                          | otherwise       = (gmURT V.! i) `uuSum` (gmLLT V.! (i-1))
+                                               deltaVels                    = V.generate nPlanets deltaVel
+                                               newRVels                     = V.zipWith uuSum rvelocities deltaVels
+                                               newPos                       = V.zipWith uuSum positions newRVels
+                                            in advance' (n-1) rmasses newPos newRVels
+
+kenergy :: V.Vector(Double) -> V.Vector (U.Vector Double) -> Double
+kenergy masses velocities = let vvs  = V.map uMagnitudeSq velocities
+                                mv2s = V.zipWith (*) vvs masses
+                            in 0.5 * V.sum mv2s
+
+penergy' :: V.Vector(Double) -> V.Vector (U.Vector Double) -> Int -> Int -> Double
+penergy' masses positions i j = let pi = positions V.! i
+                                    pj = positions V.! j
+                                    d  = uMagnitude $ pi `uuDifference` pj
+                                    mi = masses V.! i
+                                    mj = masses V.! j
+                                in -1.0 * mi * mj / d
+
+penergy :: V.Vector(Double) -> V.Vector (U.Vector Double) -> Double
+penergy masses positions = let nm1 = (V.length masses) - 1
+                           in sum [ penergy' masses positions i j | i <- [0..nm1], j <- [i+1..nm1] ]
+
+energy :: V.Vector(Double) -> V.Vector (U.Vector Double) -> V.Vector (U.Vector Double) -> Double
+energy masses positions velocities = (kenergy masses velocities) + (penergy masses positions)
+
+momentum :: V.Vector(Double) -> V.Vector (U.Vector Double) -> U.Vector Double
+momentum masses velocities = let mvs = V.zipWith udProduct velocities masses
+                             in V.foldl uuSum uZero3 mvs
+
+--------------------------------------------------------------------------------
+
+days_per_year = 365.24::Double
+solar_mass    = (4 * pi ^ 2)::Double
+dp            = days_per_year::Double
+dt            = 0.01::Double
+
+sunPos      = U.fromList [ 0, 0, 0 ]
+sunVel      = U.fromList [ 0, 0, 0 ]
+sunMass     = solar_mass
+
+jupiterPos  = U.fromList [ 4.84143144246472090e+00,      -1.16032004402742839e+00,      -1.03622044471123109e-01      ] :: U.Vector(Double)
+jupiterVel  = U.fromList [ 1.66007664274403694e-03 * dp,  7.69901118419740425e-03 * dp, -6.90460016972063023e-05 * dp ] :: U.Vector(Double)
+jupiterMass = 9.54791938424326609e-04 * solar_mass
+
+saturnPos   = U.fromList [  8.34336671824457987e+00,      4.12479856412430479e+00,      -4.03523417114321381e-01      ] :: U.Vector(Double)
+saturnVel   = U.fromList [ -2.76742510726862411e-03 * dp, 4.99852801234917238e-03 * dp,  2.30417297573763929e-05 * dp ] :: U.Vector(Double)
+saturnMass  = 2.85885980666130812e-04 * solar_mass
+
+uranusPos   = U.fromList [ 1.28943695621391310e+01,      -1.51111514016986312e+01,      -2.23307578892655734e-01      ] :: U.Vector(Double)
+uranusVel   = U.fromList [ 2.96460137564761618e-03 * dp,  2.37847173959480950e-03 * dp, -2.96589568540237556e-05 * dp ] :: U.Vector(Double)
+uranusMass  = 4.36624404335156298e-05 * solar_mass
+
+neptunePos  = U.fromList [ 1.53796971148509165e+01,      -2.59193146099879641e+01,       1.79258772950371181e-01      ] :: U.Vector(Double)
+neptuneVel  = U.fromList [ 2.68067772490389322e-03 * dp,  1.62824170038242295e-03 * dp, -9.51592254519715870e-05 * dp ] :: U.Vector(Double)
+neptuneMass = 5.15138902046611451e-05 * solar_mass
+
+positions  = V.fromList [ sunPos,  jupiterPos,  saturnPos,  uranusPos,  neptunePos ]
+velocities = V.fromList [ sunVel,  jupiterVel,  saturnVel,  uranusVel,  neptuneVel ]
+masses     = V.fromList [ sunMass, jupiterMass, saturnMass, uranusMass, neptuneMass ]
+
+                               
+
+main = do
+     --n <- getArgs >>= readIO.head :: IO Int
+     let n                 = 1000
+     let mo                = momentum masses velocities
+     print (energy masses positions velocities )
+     let offsetSunVel      = udProduct mo (-1.0 / solar_mass )
+     let offsetVelocities  = V.fromList [ offsetSunVel, jupiterVel,  saturnVel,  uranusVel, neptuneVel ]
+     print (energy masses positions offsetVelocities)
+     let (positions', velocities') = advance n dt masses positions offsetVelocities
+     print (energy masses positions velocities' )
 
 
-sample = let p0   = U.fromList [ -1.0, 0.0, 0.0 ]
-             p1   = U.fromList [  0.0, 0.0, 0.0 ]
-             p2   = U.fromList [  1.0, 0.0, 0.0 ]
-             positions  = V.fromList [ p0, p1, p2 ]
-             v0   = U.fromList [ -1.0, 0.0, 0.0 ]
-             v1   = U.fromList [  0.0, 0.0, 0.0 ]
-             v2   = U.fromList [  1.0, 0.0, 0.0 ]
-             velocities  = V.fromList [v0, v1, v2]
-             masses = V.fromList [ 1.0, 100.0, 1.0 ]
-         in (Planets positions velocities masses)
 
 
+-- sun = Planet {x = 0, y = 0, z = 0,
+--               vx = 0, vy = 0, vz = 0,
+--               mass = solar_mass}
+              
+-- jupiter = Planet 
+--     {x = 4.84143144246472090e+00, y = -1.16032004402742839e+00, z= -1.03622044471123109e-01,
+--      vx = 1.66007664274403694e-03*dp, vy = 7.69901118419740425e-03*dp, vz = -6.90460016972063023e-05*dp,
+--      mass = 9.54791938424326609e-04 * solar_mass}
+
+-- saturn = Planet
+--     { x = 8.34336671824457987e+00, y = 4.12479856412430479e+00, z = -4.03523417114321381e-01,
+--      vx = -2.76742510726862411e-03*dp,  vy = 4.99852801234917238e-03*dp, vz = 2.30417297573763929e-05*dp,
+--      mass = 2.85885980666130812e-04 * solar_mass}
+
+-- uranus = Planet
+--     {x = 1.28943695621391310e+01,y = -1.51111514016986312e+01,z = -2.23307578892655734e-01,
+--      vx = 2.96460137564761618e-03*dp,vy = 2.37847173959480950e-03*dp, vz = -2.96589568540237556e-05*dp,
+--      mass = 4.36624404335156298e-05 * solar_mass}
+
+-- neptune = Planet
+--     {x = 1.53796971148509165e+01,y = -2.59193146099879641e+01,z = 1.79258772950371181e-01,
+--      vx = 2.68067772490389322e-03*dp,vy = 1.62824170038242295e-03*dp, vz = -9.51592254519715870e-05*dp,
+--      mass = 5.15138902046611451e-05 * solar_mass}
+
+
+
+
+
+
+
+-- sample = let p0          = U.fromList [ -1.0,   0.0, 0.0::Double ]
+--              p1          = U.fromList [  0.0,   0.0, 0.0::Double ]
+--              p2          = U.fromList [  1.0,   0.0, 0.0::Double ]
+--              positions   = V.fromList [   p0,    p1,  p2 ]
+--              v0          = U.fromList [ -1.0,   0.0, 0.0::Double ]
+--              v1          = U.fromList [  0.0,   0.0, 0.0::Double ]
+--              v2          = U.fromList [  1.0,   0.0, 0.0::Double ]
+--              velocities  = V.fromList [   v0,    v1,  v2 ]
+--              masses      = V.fromList [  1.0, 100.0, 1.0::Double ]
+--          in (masses, positions, velocities)
+
+
+
+
+
+
+
+
+
+-- advance 0 _  masses positions velocities = (positions, velocities)
+-- advance n dt masses positions velocities = let massesDt                     = dvProduct dt masses
+--                                                gURT                         = gravURT positions
+--                                                gLLT                         = gravLLT gURT
+--                                                gmURT                        = vvURTDotMapV udProduct gURT (V.unsafeTail massesDt)
+--                                                gmLLT                        = vvDotMapV udProduct gLLT massesDt
+--                                                nPlanets                     = V.length massesDt
+--                                                lastPlanet                   = nPlanets - 1
+--                                                deltaVel i | i == 0          = gmURT V.! 0
+--                                                           | i == lastPlanet = gmLLT V.! (lastPlanet-1)
+--                                                           | otherwise       = (gmURT V.! i) `uuSum` (gmLLT V.! (i-1))
+--                                                deltaVels                    = V.generate nPlanets deltaVel
+--                                                newVels                      = V.zipWith uuSum velocities deltaVels
+--                                                deltaPos                     = V.map (duProduct dt) newVels
+--                                                newPos                       = V.zipWith uuSum positions deltaPos
+--                                            in advance (n-1) dt masses newPos newVels

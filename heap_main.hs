@@ -20,7 +20,7 @@ main = do
   putStrLn ""
   let nums = take 20 ( randomRs (1::Int, 1000::Int ) g )
       h = make_heap nums
-      in print ( count_bin_tree ( heap_as_bin_tree h ) )
+      in print ( bin_tree_count ( heap_as_bin_tree h ) )
          
   
 

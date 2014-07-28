@@ -15,11 +15,15 @@ main = do
   putStrLn ""
   let nums = take 20 ( randomRs (1::Int, 1000::Int ) g )
       h = make_rbt nums
-      in print ( count_bst ( rbt_as_bst h ) )
+      in print ( bst_count ( rbt_as_bst h ) )
   putStrLn ""
   let nums = take 200 ( randomRs (1::Int, 1000::Int ) g )
       h = make_rbt nums
       in print ( bin_tree_depth ( rbt_as_bin_tree h ) )
+  putStrLn ""
+  let nums = take 200 ( randomRs (1::Int, 1000::Int ) g )
+      h = make_rbt nums
+      in print ( rbt_show ( rbt_as_bin_tree h ) )
   putStrLn ""
   let nums = [ 1 .. 200 ]
       h = make_rbt nums
@@ -30,4 +34,4 @@ main = do
       in print ( bin_tree_depth ( rbt_as_bin_tree h ) )
   let nums = take 200 ( randomRs (1::Int, 100::Int ) g )
       h = make_rbt nums
-      in print ( bin_tree_show ( rbt_as_bin_tree ( search_bst ( RBItem Black 20 ) (rbt_as_bst h ) ) ) )
+      in print ( bin_tree_show ( rbt_as_bin_tree ( bst_search ( RBItem Black 20 ) (rbt_as_bst h ) ) ) )

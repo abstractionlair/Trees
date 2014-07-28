@@ -10,44 +10,54 @@ bst_as_bin_tree t = t
 
 bst_show :: Show a => BST a -> [[[Char]]]
 bst_show  = bin_tree_show  . bst_as_bin_tree
-count_bst = count_bin_tree . bst_as_bin_tree
+bst_count = bin_tree_count . bst_as_bin_tree
 bst_depth = bin_tree_depth . bst_as_bin_tree
 
-rotate_bst_left EmptyBinTree                                                           = EmptyBinTree
-rotate_bst_left t@( BinTree vt EmptyBinTree               EmptyBinTree               ) = t
-rotate_bst_left t@( BinTree vt lt                         EmptyBinTree               ) = t
-rotate_bst_left t@( BinTree vt EmptyBinTree               rt                         ) = BinTree ( value rt ) t EmptyBinTree
-rotate_bst_left t@( BinTree vt lt@( BinTree vlt llt rlt ) rt@( BinTree vrt lrt rrt ) ) = BinTree vrt ( BinTree vt lt lrt ) rrt
-
-rotate_bst_right EmptyBinTree                                                           = EmptyBinTree
-rotate_bst_right t@( BinTree vt EmptyBinTree               EmptyBinTree               ) = t
-rotate_bst_right t@( BinTree vt lt                         EmptyBinTree               ) = BinTree ( value lt ) EmptyBinTree t
-rotate_bst_right t@( BinTree vt EmptyBinTree               rt                         ) = t
-rotate_bst_right t@( BinTree vt lt@( BinTree vlt llt rlt ) rt@( BinTree vrt lrt rrt ) ) = BinTree vlt llt (BinTree vt rlt rt)
-
-add_to_bst :: Ord a => BST a -> a -> BST a
-add_to_bst EmptyBinTree                                                            nv             = BinTree nv EmptyBinTree           EmptyBinTree
-add_to_bst t@( BinTree vt EmptyBinTree               EmptyBinTree )                nv | nv > vt   = BinTree nv ( init_bin_tree vt  )  EmptyBinTree
-                                                                                      | otherwise = BinTree vt ( init_bin_tree nv )   EmptyBinTree
+bst_add :: Ord a => BST a -> a -> BST a
+bst_add EmptyBinTree                                                            nv             = BinTree nv EmptyBinTree           EmptyBinTree
+bst_add t@( BinTree vt EmptyBinTree               EmptyBinTree )                nv | nv > vt   = BinTree nv ( bin_tree_init vt  )  EmptyBinTree
+                                                                                   | otherwise = BinTree vt ( bin_tree_init nv )   EmptyBinTree
                                                          
-add_to_bst t@( BinTree vt lt@( BinTree vlt llt rlt ) EmptyBinTree )                nv | nv > vt   = BinTree vt  lt                    ( init_bin_tree nv )  -- nv > v >= l
-                                                                                      | nv > vlt  = BinTree nv  lt                    ( init_bin_tree vt )  -- v >= nv > l
-                                                                                      | otherwise = BinTree vlt ( add_to_bst llt nv ) ( add_to_bst rlt vt ) -- v >= l >= nv
+bst_add t@( BinTree vt lt@( BinTree vlt llt rlt ) EmptyBinTree )                nv | nv > vt   = BinTree vt  lt                    ( bin_tree_init nv )  -- nv > v >= l
+                                                                                   | nv > vlt  = BinTree nv  lt                    ( bin_tree_init vt )  -- v >= nv > l
+                                                                                   | otherwise = BinTree vlt ( bst_add llt nv ) ( bst_add rlt vt ) -- v >= l >= nv
 
-add_to_bst t@( BinTree vt EmptyBinTree               rt@( BinTree vrt lrt rrt ) )  nv | nv > vrt  = BinTree vrt ( add_to_bst lrt vt ) ( add_to_bst rrt nv ) -- nv > r  > v
-                                                                                      | nv > vt   = BinTree nv  ( init_bin_tree vt )  rt                    -- r  > nv > v
-                                                                                      | otherwise = BinTree vt  ( init_bin_tree nv )  rt                    -- r  > v  > nv
+bst_add t@( BinTree vt EmptyBinTree               rt@( BinTree vrt lrt rrt ) )  nv | nv > vrt  = BinTree vrt ( bst_add lrt vt ) ( bst_add rrt nv ) -- nv > r  > v
+                                                                                   | nv > vt   = BinTree nv  ( bin_tree_init vt )  rt                    -- r  > nv > v
+                                                                                   | otherwise = BinTree vt  ( bin_tree_init nv )  rt                    -- r  > v  > nv
 
-add_to_bst t@( BinTree vt lt@( BinTree vlt llt rlt ) rt @( BinTree vrt lrt rrt ) ) nv | nv > vrt  = BinTree vt lt                     ( add_to_bst rt nv )  -- nv  > r  >  v  >= l
-                                                                                      | nv > vt   = BinTree vt lt                     ( add_to_bst rt nv )  -- r  >= nv >  v  >= l
-                                                                                      | nv > vlt  = BinTree vt ( add_to_bst lt nv )   rt                    -- r  >  v  >= nv >  l
-                                                                                      | otherwise = BinTree vt ( add_to_bst lt nv )   rt                    -- r  >  v  >= l  >= nv
+bst_add t@( BinTree vt lt@( BinTree vlt llt rlt ) rt @( BinTree vrt lrt rrt ) ) nv | nv > vrt  = BinTree vt lt                     ( bst_add rt nv )  -- nv  > r  >  v  >= l
+                                                                                   | nv > vt   = BinTree vt lt                     ( bst_add rt nv )  -- r  >= nv >  v  >= l
+                                                                                   | nv > vlt  = BinTree vt ( bst_add lt nv )   rt                    -- r  >  v  >= nv >  l
+                                                                                   | otherwise = BinTree vt ( bst_add lt nv )   rt                    -- r  >  v  >= l  >= nv
 
-make_bst :: Ord a => [ a ] -> BST a
-make_bst = foldl add_to_bst EmptyBinTree
+bst_make :: Ord a => [ a ] -> BST a
+bst_make = foldl bst_add EmptyBinTree
 
-search_bst v EmptyBinTree = EmptyBinTree
-search_bst v t@( BinTree vt lt rt ) | v >  vt   = search_bst v rt
+bst_search v EmptyBinTree = EmptyBinTree
+bst_search v t@( BinTree vt lt rt ) | v >  vt   = bst_search v rt
                                     | v == vt   = t
-                                    | otherwise = search_bst v lt
+                                    | otherwise = bst_search v lt
 
+bst_rotate_left EmptyBinTree                                                           = EmptyBinTree
+bst_rotate_left t@( BinTree vt EmptyBinTree               EmptyBinTree               ) = t
+bst_rotate_left t@( BinTree vt lt                         EmptyBinTree               ) = t
+bst_rotate_left t@( BinTree vt EmptyBinTree               rt                         ) = BinTree ( value rt ) t EmptyBinTree
+bst_rotate_left t@( BinTree vt lt@( BinTree vlt llt rlt ) rt@( BinTree vrt lrt rrt ) ) = BinTree vrt ( BinTree vt lt lrt ) rrt
+
+bst_rotata_right EmptyBinTree                                                           = EmptyBinTree
+bst_rotata_right t@( BinTree vt EmptyBinTree               EmptyBinTree               ) = t
+bst_rotata_right t@( BinTree vt lt                         EmptyBinTree               ) = BinTree ( value lt ) EmptyBinTree t
+bst_rotata_right t@( BinTree vt EmptyBinTree               rt                         ) = t
+bst_rotata_right t@( BinTree vt lt@( BinTree vlt llt rlt ) rt@( BinTree vrt lrt rrt ) ) = BinTree vlt llt (BinTree vt rlt rt)
+
+bst_merge EmptyBinTree         EmptyBinTree                      = EmptyBinTree
+bst_merge EmptyBinTree         r                                 = r
+bst_merge l                    EmptyBinTree                      = l
+bst_merge l@(BinTree vl ll rl) r@(BinTree vr lr rr ) | vl > vr   = BinTree vl ll               (bst_merge rl r)
+                                                     | otherwise = BinTree vr (bst_merge l lr) rr
+
+bst_delete EmptyBinTree      ov             = EmptyBinTree
+bst_delete t@(BinTree v l r) ov | ov > v    = BinTree v l (bst_delete r ov)
+                                | ov == v   = bst_merge l r
+                                | otherwise = BinTree v (bst_delete l ov) r
