@@ -24,22 +24,30 @@ advance count dt nBodies nAxes masses positions velocities =
                                  -- Build a function for the change in one component of velocities
                                  velForFn oset = let (b3,a) = invOffset oset
                                                  in if b3 == b
-                                                    then let vf (vels, deltaX, masses, mag) = (vels U.! (ob_0 + a)) - (deltaX U.! a) * (masses U.! b2) * mag
+                                                    then let vf (vels, dx, dy, dz, masses, mag) = case a of
+                                                                                                       0 -> (vels U.! (ob_0    )) - dx * (masses U.! b2) * mag
+                                                                                                       1 -> (vels U.! (ob_0 + 1)) - dy * (masses U.! b2) * mag
+                                                                                                       2 -> (vels U.! (ob_0 + 2)) - dz * (masses U.! b2) * mag
                                                          in vf
                                                     else if b3 == b2
-                                                    then let vf (vels, deltaX, masses, mag) = (vels U.! (ob2_0 + a)) + (deltaX U.! a) * (masses U.! b)  * mag
+                                                    then let vf (vels, dx, dy, dz, masses, mag) = case a of 
+                                                                                                       0 -> (vels U.! (ob2_0    )) + dx * (masses U.! b)  * mag
+                                                                                                       1 -> (vels U.! (ob2_0 + 1)) + dy * (masses U.! b)  * mag
+                                                                                                       2 -> (vels U.! (ob2_0 + 2)) + dz * (masses U.! b)  * mag
                                                          in vf
-                                                    else let vf (vels, deltaX, masses, mag) = (vels U.! oset)
+                                                    else let vf (vels, dx, dy, dz, masses, mag) = (vels U.! oset)
                                                          in vf 
 
                                  -- Collect functions for all the components
                                  velForFns     = V.generate vecSize velForFn
 
                                  -- Put them together into the single function for all the components
-                                 advanceVels' (posns, vels) = let deltaX   = U.fromList [ (posns U.! ob_0) - (posns U.! ob2_0), (posns U.! ob_1) - (posns U.! ob2_1), (posns U.! ob_2) - (posns U.! ob2_2) ]
-                                                                  distance = sqrt ( (deltaX U.! 0) * (deltaX U.! 0) + (deltaX U.! 1) * (deltaX U.! 1) + (deltaX U.! 2) * (deltaX U.! 2) )
+                                 advanceVels' (posns, vels) = let dx       = (posns U.! ob_0) - (posns U.! ob2_0)
+                                                                  dy       = (posns U.! ob_1) - (posns U.! ob2_1)
+                                                                  dz       = (posns U.! ob_2) - (posns U.! ob2_2)
+                                                                  distance = sqrt ( dx * dx + dy * dy + dz * dz )
                                                                   mag      = dt / ( distance * distance * distance )
-                                                              in (posns, (U.convert $ V.map ($ (vels, deltaX, masses, mag)) velForFns ) :: U.Vector(Double))
+                                                              in (posns, (U.convert $ V.map ($ (vels, dx, dy, dz, masses, mag)) velForFns ) :: U.Vector(Double))
 
                              in advanceVels'
       -- Collect functions for all (b,b2) pairs and join them into a single velocity advancing function
