@@ -2,60 +2,60 @@ module Main where
 
 import Control.DeepSeq
 import qualified Data.Vector.Unboxed as U
+import qualified Data.Vector as V
 import System.Environment
 
-
-sample = let dt         = 0.01 :: Double
-             nBodies    = 2::Int
-             nAxes      = 3::Int
-             masses     = ( U.fromList [  1.0, 2.0 ] ) :: U.Vector(Double)
-             positions  = ( U.fromList [  1.0, 1.0, 1.0,  0.0, 0.0, 0.0 ] ) :: U.Vector(Double)
-             velocities = ( U.fromList [  0.0, 0.0, 0.0,  1.0, 1.0, 1.0 ] ) :: U.Vector(Double)
-         in (dt,nBodies,nAxes,masses,positions,velocities)
 
 advance count dt nBodies nAxes masses positions velocities =
   let vecSize                 = nBodies * nAxes
       nBodiesM1               = nBodies - 1
-      mass      b             = masses U.! b
       offset    body axis     = body * nAxes + axis
       invOffset oset          = oset `divMod` nAxes
 
-      advanceVels (b,b2) (posns, vels ) = let pos b a     = posns U.! (offset b a)
-                                              vel b a     = vels  U.! (offset b a)
-                                              deltaX      = U.generate 3 (\i -> (pos b i) - (pos b2 i))
-                                              distance    = sqrt ( (deltaX U.! 0) * (deltaX U.! 0) + (deltaX U.! 1) * (deltaX U.! 1) + (deltaX U.! 2) * (deltaX U.! 2) )
-                                              mag         = dt / ( distance * distance * distance )
-                                              velFor oset = let (b3,a) = invOffset oset
-                                                            in if b3 == b
-                                                               then (vel b  a) - (deltaX U.! a) * (mass b2) * mag
-                                                               else if b3 == b2
-                                                               then (vel b2 a) + (deltaX U.! a) * (mass b)  * mag
-                                                               else (vel b3 a)
-                                          in (posns, U.generate vecSize velFor)
-      advanceAllVels                    = foldl (.) id $ map advanceVels [ (i,j) | i <- [0..nBodiesM1], j <- [(i+1)..nBodiesM1] ]
+      -- Build a function for the change in velocities from the interaction of b abd b2. (Positions go along for the ride to make the results composeable.)
+      -- Get as much done outside the loop as possible.
+      advanceVelsFn (b,b2) = let ob_0  = offset b 0
+                                 ob_1  = ob_0 + 1
+                                 ob_2  = ob_1 + 1
+                                 ob2_0 = offset b2 0
+                                 ob2_1 = ob2_0 + 1
+                                 ob2_2 = ob2_1 + 1
+  
+                                 -- Build a function for the change in one component of velocities
+                                 velForFn oset = let (b3,a) = invOffset oset
+                                                 in if b3 == b
+                                                    then let vf (vels, deltaX, masses, mag) = (vels U.! (ob_0 + a)) - (deltaX U.! a) * (masses U.! b2) * mag
+                                                         in vf
+                                                    else if b3 == b2
+                                                    then let vf (vels, deltaX, masses, mag) = (vels U.! (ob2_0 + a)) + (deltaX U.! a) * (masses U.! b)  * mag
+                                                         in vf
+                                                    else let vf (vels, deltaX, masses, mag) = (vels U.! oset)
+                                                         in vf 
 
-      advancePos posns  vels            = let pos b a     = posns U.! (offset b a)
-                                              vel b a     = vels  U.! (offset b a)
-                                              posFor oset = let (b,a) = invOffset oset
-                                                            in (pos b a) + dt * (vel b a)
-                                          in U.generate vecSize posFor
+                                 -- Collect functions for all the components
+                                 velForFns     = V.generate vecSize velForFn
+
+                                 -- Put them together into the single function for all the components
+                                 advanceVels' (posns, vels) = let deltaX   = U.fromList [ (posns U.! ob_0) - (posns U.! ob2_0), (posns U.! ob_1) - (posns U.! ob2_1), (posns U.! ob_2) - (posns U.! ob2_2) ]
+                                                                  distance = sqrt ( (deltaX U.! 0) * (deltaX U.! 0) + (deltaX U.! 1) * (deltaX U.! 1) + (deltaX U.! 2) * (deltaX U.! 2) )
+                                                                  mag      = dt / ( distance * distance * distance )
+                                                              in (posns, (U.convert $ V.map ($ (vels, deltaX, masses, mag)) velForFns ) :: U.Vector(Double))
+
+                             in advanceVels'
+      -- Collect functions for all (b,b2) pairs and join them into a single velocity advancing function
+      advanceAllVels       = foldl (.) id $ map advanceVelsFn [ (i,j) | i <- [0..nBodiesM1], j <- [(i+1)..nBodiesM1] ]
 
       advance' 0     positions velocities = (positions, velocities)
       advance' count positions velocities =
         let 
             (_,newVels) = advanceAllVels (positions,velocities)
-            newPos      = advancePos positions newVels
+            newPos      = U.zipWith (\p v -> p + v * dt) positions newVels
         in newPos `deepseq` (advance' (count-1) newPos newVels )
 
   in advance' count positions velocities 
 
-
-
-
-
-
-
-
+--------------------------------------------------------------------------------
+-- Called very few times; not optimized.
 
 kenergy nBodies nAxes masses velocities = let vvs = U.map (^2) velocities
                                               mmm = foldl (U.++) (U.empty :: U.Vector(Double)) $ map (\x -> (U.fromList [x,x,x])) (U.toList masses)
@@ -86,6 +86,7 @@ momentum nBodies nAxes masses velocities = let mvx = U.sum $ U.zipWith (*) masse
                                                mvy = U.sum $ U.zipWith (*) masses $ U.ifilter (\i v -> (i `mod` nAxes == 1)) velocities
                                                mvz = U.sum $ U.zipWith (*) masses $ U.ifilter (\i v -> (i `mod` nAxes == 2)) velocities
                                            in U.fromList [ mvx, mvy, mvz ]
+--------------------------------------------------------------------------------
 
 
 
