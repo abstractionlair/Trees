@@ -1,6 +1,8 @@
 module AVL
        where
 
+-- AVL (Adelson, Velsky, Landis) Trees
+
 import BinTree
 
 

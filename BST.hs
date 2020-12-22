@@ -1,6 +1,8 @@
 module BST
        where
 
+-- Binary Search Trees
+
 import BinTree
 
 type BST a = BinTree a

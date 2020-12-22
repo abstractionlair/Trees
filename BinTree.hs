@@ -1,6 +1,9 @@
 module BinTree
        where
 
+-- Binary Trees
+
+
 -- Every tutorial defines this as Tree, but it is specifically binary.
 -- It would be nice to abbreviate to BTree, but that imples something else.
 data BinTree a = EmptyBinTree
